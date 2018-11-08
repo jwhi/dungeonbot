@@ -1,28 +1,24 @@
 const { RTMClient } = require('@slack/client');
 var env = require('node-env-file');
 const http = require("http");
+var fs = require('fs');
 var Players = require('./User.js')
 env(__dirname + '/.env', {raise: false});
 
 var currentPlayers = {};
 
+fs.readFile('playerFile.json', 'utf8', function readFileCallback(err, data){
+  if (err){
+      console.log(err);
+  } else {
+  currentPlayers = JSON.parse(data); //now it an object
+  }
+});
+
 // The client is initialized and then started to get an active connection to the platform
 const token = process.env.SLACK_TOKEN;
 const rtm = new RTMClient(token);
 rtm.start();
-
-
-// This argument can be a channel ID, a DM ID, a MPDM ID, or a group ID
-const conversationId = 'DDWM5BAU8';
-// The RTM client can send simple string messages
-/*
-rtm.sendMessage('Hello there', conversationId)
-  .then((res) => {
-    // `res` contains information about the posted message
-    console.log('Message sent: ', res.ts);
-  })
-  .catch(console.error);
-*/
 
 // General: CDXD5S2KU
 // Random: CDXD5S3T4
@@ -42,11 +38,27 @@ rtm.on('message', (message) => {
     player = new Players.User(message.channel);
     currentPlayers[message.channel] = player;
   }
-
-  if (player.currentGameID && player.state == "playingGame") {
+  if (message.text[0] == '!') {
+    switch(message.text) {
+      case '!newGame':
+        player.state = '';
+        console.log('newGame')
+        break;
+      case '!loadGame':
+        player.state = 'loadGame';
+        break;
+      case '!resumeGame':
+        player.state = 'playingGame';
+        message.text = '';
+      default:
+        break;
+    }
+  }
+  if (player.currentGameID && player.state == "playingGame" && message.text != '') {
     // Player is currently playing a game. Forward the message to the Interactive Fiction server
   
     console.log("message text: " + message.text)
+  
     var actionText = JSON.stringify({
         "action": message.text
     });
@@ -85,8 +97,8 @@ rtm.on('message', (message) => {
     });
     // refer to comment at the bottom and figure out how i wrote the data to the server. kthx.
     req.write(actionText);
-    
-  } else if (player.state == '') {
+  }  
+  if (player.state == '') {
     // Player is not currently playing a game. Ask them which game to play
     var options = {
       host: process.env.SERVER_ADDRESS,
@@ -164,38 +176,20 @@ rtm.on('message', (message) => {
     req.write(gameSelection);
     
 
-  } else {
-    console.log("Invalid player state: " + player.state);
   }
 
-  // Log the message
-  console.log(`(channel:${message.channel}) ${message.user} says: ${message.text}`);
-});
+  if (player.state == "loadGame") {
+    // Get the list of current games
+    var options = {
+      host: process.env.SERVER_ADDRESS,
+      port: process.env.PORT,
+      path: '/games',
+      method: 'GET',
+      headers: {
+          accept: 'application/json'
+      }
+    };
 
-/*
-const http = require("http");
-const readline = require('readline');
-var state = 'Start';
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-var options = {
-  host: '192.168.5.129',
-  port: 8080,
-  path: '/titles',
-  method: 'GET',
-  headers: {
-      accept: 'application/json'
-  }
-};
-
-while (state != 'End') {
-  if (state == 'Start') {
-    state = "Waitings";
-    var gamesList = '';
     var req = http.request(options, function(res) {
       var responseString = "";
       
@@ -204,52 +198,48 @@ while (state != 'End') {
       });
     
       res.on("end", function() {
-        gamesList = JSON.parse(data);
+        gamesList = JSON.parse(responseString);
+        /*
+        [
+          {"pid":7947,
+          "name":"zork1",
+          "zFile":"/home/jeremy/zmachine-api/src/../zcode/zork1.z5",
+          "label":"zork game"}
+        ]
+        */
+        var s_message = '';
+        for (var i = 0; i < player.savedGames.length; i++) {
+          var gameFile = gamesList.find(function(element) {return element.pid == player.savedGames[i]});
+          s_message += gameFile.pid + ": " + gameFile.label + '\n';
+        }
+        if (s_message.length > 0) {
+          rtm.sendMessage("Enter the id of the game you want to play:\n" + s_message, player.channelID)
+          .then((s_res) => {
+            // `res` contains information about the posted message
+            console.log('Message sent: ', s_res.ts);
+            player.state = 'loadingGame';
+          })
+          .catch(console.error);
+        }
       });
     });
     req.end();
-    console.log(gamesList);
-    rl.question('Which game? ', (answer) => {
-
-    });
-        
   }
-}
-
-
-
-
-const data = JSON.stringify({
-  "game": "zork1",
-  "label": "zork game"
-});
-
-options.path = '/games'
-options.method = 'POST'
-options.headers = {
-    'Content-Type': 'application/json',
-    'Content-Length': data.length
+  if (player.state == 'loadingGame') {
+    var foundGame = player.savedGames.find(function(element) {return element == message.text});
+    if (foundGame) {
+      player.currentGameID = message.text;
+      player.state = "playingGame";
+    }
   }
 
-
-req = http.request(options, function(res) {
-  var responseString = "";
-  
-  res.on("data", function (data) {
-    responseString += data;
-  });
-
-  res.on("end", function() {
-    console.log(responseString);
-    
-    req.end();
-  })
+  // Log the message
+  console.log(`(channel:${message.channel}) ${message.user} says: ${message.text}`);
 });
-
-req.write(data);
-*/
 
 process.on('SIGINT', function() {
   console.log('Shuting down...');
+  console.log('Saving players');0
+  fs.writeFileSync('playerFile.json', JSON.stringify(currentPlayers), 'utf8');
   process.exit();
 });
