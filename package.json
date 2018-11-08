@@ -1,0 +1,16 @@
+{
+  "name": "slackadventure",
+  "version": "1.0.0",
+  "description": "Slack Bot to interact with Interactive Fiction API",
+  "main": "index.js",
+  "dependencies": {
+    "node-env-file": "^0.1.8",
+    "npm": "^6.4.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jeremy White",
+  "license": "ISC"
+}
