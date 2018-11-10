@@ -38,7 +38,7 @@ rtm.on('message', (message) => {
     player = new Players.User(message.channel);
     currentPlayers[message.channel] = player;
   }
-  if (message.text[0] == '!') {
+  if (message.text.length > 0 && message.text[0] == '!') {
     switch(message.text) {
       case '!newGame':
         player.state = '';
@@ -53,6 +53,11 @@ rtm.on('message', (message) => {
       default:
         break;
     }
+  }
+  if (message.text.toUpperCase() == 'QUIT') {
+    //player.savedGames.filter(saveFile => saveFile != player.currentGameID);
+    player.currentGameID = '';
+    player.state = '';
   }
   if (player.currentGameID && player.state == "playingGame" && message.text != '') {
     // Player is currently playing a game. Forward the message to the Interactive Fiction server
@@ -208,9 +213,12 @@ rtm.on('message', (message) => {
         ]
         */
         var s_message = '';
+        
         for (var i = 0; i < player.savedGames.length; i++) {
           var gameFile = gamesList.find(function(element) {return element.pid == player.savedGames[i]});
-          s_message += gameFile.pid + ": " + gameFile.label + '\n';
+          console.log(gameFile)
+          if(gameFile)
+            s_message += gameFile.pid + ": " + gameFile.label + '\n';
         }
         if (s_message.length > 0) {
           rtm.sendMessage("Enter the id of the game you want to play:\n" + s_message, player.channelID)
@@ -235,6 +243,7 @@ rtm.on('message', (message) => {
 
   // Log the message
   console.log(`(channel:${message.channel}) ${message.user} says: ${message.text}`);
+  fs.writeFileSync('playerFile.json', JSON.stringify(currentPlayers), 'utf8');
 });
 
 process.on('SIGINT', function() {
